@@ -10,7 +10,7 @@ size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::string *use
     return size * nmemb;
 }
 
-int fetch() {
+json fetch() {
     CURL *curl;
     CURLcode res;
     std::string readBuffer;
@@ -30,23 +30,14 @@ int fetch() {
 
         curl_easy_cleanup(curl);
     }
-    
-    return 0;
-}
 
-void parse() {
-    json j = R"(
-        {
-            "happy": true,
-            "pi": 3.141
-        }
-    )"_json;
-
-    std::cout << j.dump(4) << std::endl;
+    return json::parse(readBuffer);
 }
 
 int main() {
-    fetch();
-    parse();
+    json res = fetch();
+
+    std::cout << res["name"] << std::endl;
+
     return 0;
 }
