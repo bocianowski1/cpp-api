@@ -11,3 +11,6 @@ local:
 
 	@echo "Running code\n"
 	@./bin/$(f)
+
+amend:
+	@git add . && git commit --amend --no-edit && git push -f
