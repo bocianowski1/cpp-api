@@ -7,7 +7,7 @@ run:
 
 local:
 	@echo "Compiling..."
-	@g++ -std=c++20 -o bin/$(f) $(f).cpp
+	@g++ -std=c++20 -o bin/$(f) $(f).cpp -lcurl
 
 	@echo "Running code\n"
 	@./bin/$(f)
