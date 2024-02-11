@@ -1,12 +1,16 @@
 #include <curl/curl.h>
 #include <iostream>
+#include <string>
+#include "json.hpp"
+
+using json = nlohmann::json;
 
 size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::string *userp) {
     userp->append((char*)contents, size * nmemb);
     return size * nmemb;
 }
 
-int main() {
+int fetch() {
     CURL *curl;
     CURLcode res;
     std::string readBuffer;
@@ -27,5 +31,22 @@ int main() {
         curl_easy_cleanup(curl);
     }
     
+    return 0;
+}
+
+void parse() {
+    json j = R"(
+        {
+            "happy": true,
+            "pi": 3.141
+        }
+    )"_json;
+
+    std::cout << j.dump(4) << std::endl;
+}
+
+int main() {
+    fetch();
+    parse();
     return 0;
 }
