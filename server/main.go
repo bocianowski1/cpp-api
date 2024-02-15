@@ -7,28 +7,53 @@ import (
 	"net/http"
 )
 
-func handleGet(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "This is a GET request. Welcome!")
+var CODE string
+
+type CodeResponse struct {
+	Code string `json:"code"`
 }
 
-func handlePost(w http.ResponseWriter, r *http.Request) {
-	body, err := json.Marshal(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+func handleCallback(w http.ResponseWriter, r *http.Request) {
+	log.Println("Received CALLBACK!!!")
+	code := r.URL.Query().Get("code")
+
+	if code == "" {
+		http.Error(w, "Missing code parameter", http.StatusBadRequest)
 		return
 	}
 
-	defer r.Body.Close()
+	res := CodeResponse{
+		Code: code,
+	}
 
-	fmt.Fprintf(w, "This is a POST request. Received: %s", string(body))
+	log.Println("Global code was:", CODE)
+
+	CODE = code
+
+	log.Println("Global code is now:", CODE)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(res)
+}
+
+func handleGetCode(w http.ResponseWriter, r *http.Request) {
+	log.Println("Received get code request")
+	res := CodeResponse{
+		Code: CODE,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(res)
 }
 
 func main() {
-	http.HandleFunc("/get", handleGet)
-	http.HandleFunc("/post", handlePost)
+	http.HandleFunc("/callback", handleCallback)
+	http.HandleFunc("/code", handleGetCode)
 
-	fmt.Println("Starting server at port 8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	fmt.Println("Starting server at port 3000")
+	if err := http.ListenAndServe(":3000", nil); err != nil {
 		log.Fatal(err)
 	}
 }
