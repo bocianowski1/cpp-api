@@ -1,9 +1,5 @@
 f = main
 
-compose:
-	@echo "Running in Docker Compose\n"
-	@docker-compose up --build
-
 run:
 	@echo "Running in Docker\n"
 	@docker build -t cpp .
