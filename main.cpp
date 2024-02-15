@@ -23,6 +23,7 @@ std::pair<std::string, int> get_spotify_token(CURL *curl, char *code) {
     std::string header = "Authorization: Basic " + std::string(getenv("ENCODED_SPOTIFY_CREDENTIALS"));
     std::string contentType = "content-type: application/x-www-form-urlencoded";
     headers = curl_slist_append(headers, header.c_str());
+    headers = curl_slist_append(headers, contentType.c_str());
 
     curl = curl_easy_init();
     if (curl) {
@@ -37,24 +38,23 @@ std::pair<std::string, int> get_spotify_token(CURL *curl, char *code) {
 
         if (res != CURLE_OK) {
             std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
-            return {0, 500};
+            return {std::string{}, 500};
         }
 
         curl_easy_cleanup(curl);
         curl_slist_free_all(headers);
     }
+
     json jsonResponse;
     try {
         jsonResponse = json::parse(readBuffer);
     } catch (json::parse_error& e) {
         std::cout << "hei\n";
         std::cerr << "JSON parse error: " << e.what() << std::endl;
-        return {0, 500};
     }
 
     if (jsonResponse["error"].is_object()) {
         std::cerr << "Spotify API error: " << jsonResponse["error"]["message"] << std::endl;
-        return {0, 500};
     }
 
     return {jsonResponse["access_token"], 200};
@@ -259,10 +259,6 @@ int main() {
     auto [tokenStr, ts] = get_spotify_token(&curl, (char *)code.c_str());
     const char *token = tokenStr.c_str();
 
-    if (token == "") {
-        std::cerr << "Error when getting token: " << cs << " token: " << token << std::endl;
-        return 1;
-    }
 
     auto [response, status] = get_on_repeat_tracks(&curl, token);
 
@@ -327,5 +323,6 @@ int main() {
         }
     }
 
+    curl_easy_cleanup(curl);
     return 0;
 }
