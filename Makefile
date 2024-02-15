@@ -18,3 +18,6 @@ local:
 
 amend:
 	@git add . && git commit --amend --no-edit && git push -f
+
+server:
+	@cd server && go run main.go
