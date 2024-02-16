@@ -168,7 +168,7 @@ std::pair<json, int> get_on_repeat_tracks(CURL *curl, const char *token) {
     }
 
     if (readBuffer == "Not Found") {
-        std::cout << "Not Found" << std::endl;
+        std::cout << "Playlist not Found" << std::endl;
         return { json{}, 404 };
     }
 
