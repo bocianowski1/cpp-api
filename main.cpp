@@ -62,23 +62,29 @@ std::pair<std::string, int> get_spotify_token(CURL *curl, char *code) {
 std::pair<std::string, int> get_code(CURL *curl) {
     std::cout << "Getting code" << std::endl;
 
+    std::cout << "spotify client: " << std::string(getenv("SPOTIFY_CLIENT_ID")) << std::endl;
+
     CURLcode res;
     std::string readBuffer;
     int status;
 
     curl = curl_easy_init();
     if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:3000/code");
+        curl_easy_setopt(curl, CURLOPT_URL, "http://go-server:3000/code");
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         
         res = curl_easy_perform(curl);
         
         if (res != CURLE_OK) {
-            std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+            std::cerr << "curl_easy_perform() failed in get_code(): " << curl_easy_strerror(res) << std::endl;
         }
 
         curl_easy_cleanup(curl);
+    }
+
+    if (readBuffer == "") {
+        return {std::string{}, 500};
     }
 
     json jsonResponse;
@@ -86,12 +92,12 @@ std::pair<std::string, int> get_code(CURL *curl) {
         jsonResponse = json::parse(readBuffer);
     } catch (json::parse_error& e) {
         std::cerr << "JSON parse error: " << e.what() << std::endl;
-        return {json{}, 500};
+        return {std::string{}, 500};
     }
 
     if (jsonResponse["error"].is_object()) {
         std::cerr << "Spotify API error: " << jsonResponse["error"]["message"] << std::endl;
-        return {json{}, 500};
+        return {std::string{}, 500};
     }
 
     return {jsonResponse["code"], 200};
@@ -125,9 +131,7 @@ std::pair<std::string, int> authorize(CURL *curl) {
     }
 
     free(url);
-    auto [c, codeStatus] = get_code(curl);
-
-    return {c, status};
+    return get_code(curl);
 }
 
 std::pair<json, int> get_on_repeat_tracks(CURL *curl, const char *token) {
@@ -239,6 +243,8 @@ std::pair<json, int> add_to_playlist(CURL *curl, const char *token, std::string 
 }
 
 int main() {
+    system("./env.sh");
+
     CURL *curl;
 
     auto [code, cs] = authorize(curl);
