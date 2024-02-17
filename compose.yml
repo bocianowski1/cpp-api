@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  go-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: go-server
+    ports:
+      - "3000:3000"
+    networks:
+      - net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: app
+    env_file:
+      - .env
+    depends_on:
+      - go-server
+    networks:
+      - net
+
+networks:
+  net:
+    driver: bridge
