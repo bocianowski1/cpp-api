@@ -49,7 +49,6 @@ std::pair<std::string, int> get_spotify_token(CURL *curl, char *code) {
     try {
         jsonResponse = json::parse(readBuffer);
     } catch (json::parse_error& e) {
-        std::cout << "hei\n";
         std::cerr << "JSON parse error: " << e.what() << std::endl;
     }
 
@@ -81,8 +80,6 @@ std::pair<std::string, int> get_code(CURL *curl) {
 
         curl_easy_cleanup(curl);
     }
-
-    std::cout << "readbuffer in get_code():" << readBuffer << std::endl;
 
     json jsonResponse;
     try {
@@ -127,12 +124,8 @@ std::pair<std::string, int> authorize(CURL *curl) {
         curl_easy_cleanup(curl);
     }
 
-    auto [c, codeStatus] = get_code(curl);
-
-    std::cout << "Code: " << c << std::endl;
-    std::cout << "Status: " << codeStatus << std::endl;
-
     free(url);
+    auto [c, codeStatus] = get_code(curl);
 
     return {c, status};
 }
@@ -283,14 +276,10 @@ int main() {
     std::vector<std::pair<std::string, std::string>> tracks;
     for (auto &item : response["tracks"]["items"]) {
         i++;
-        if (i == 2) {
-            continue;
-        }
 
         std::string id = item["track"]["id"];
         std::string name = item["track"]["name"];
         tracks.push_back({id, name});
-
 
         if (i == 5) {
             break;
@@ -301,7 +290,10 @@ int main() {
         std::cout << "| id: " << track.first << " | name: " << track.second << std::endl;
     }
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
+        if (i == 1) {
+            continue;
+        }
         auto [addResponse, addStatus] = add_to_playlist(&curl, token, &tracks[i].first);
 
         if (addResponse.is_null() || addResponse == NULL) {

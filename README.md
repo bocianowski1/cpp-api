@@ -9,6 +9,5 @@ This is a project for learning C++. It adds the top songs from my _On Repeat_ pl
 ## TODO:
 
 - Automate login to spotify
-- Dont add duplicates
-- Dockerize Go server
+- Dont add duplicate songs
 - Deploy
