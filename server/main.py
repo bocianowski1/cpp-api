@@ -9,6 +9,7 @@ import os
 from flask import Flask
 
 load_dotenv()
+
 DEV = os.environ.get("ENV") == "development"
 app = Flask(__name__)
 
@@ -39,39 +40,40 @@ else:
 
 def get_code_with_auth():
     client_id = os.environ.get("SPOTIFY_CLIENT_ID")
-    if client_id is None:
-        print("Error: No client id")
+    callback_uri = os.environ.get("SPOTIFY_CALLBACK_URI")
+    if client_id is None or callback_uri is None:
+        print("Error: No client id or callback uri")
         return None
 
-    username = os.environ.get("SPOTIFY_USERNAME")
-    password = os.environ.get("SPOTIFY_PASSWORD")
-    if username is None or password is None:
+    spotify_username = os.environ.get("SPOTIFY_EMAIL")
+    spotify_password = os.environ.get("SPOTIFY_PASSWORD")
+    if spotify_username is None or spotify_password is None:
         print("Error: No username or password")
         return None
 
     try:
+        url = "https://accounts.spotify.com/en/login"
         driver.get(url)
 
-        username = driver.find_element(By.ID, "login-username")
-        username.send_keys(username)
+        username_input = driver.find_element(By.ID, "login-username")
+        username_input.send_keys(spotify_username)
 
-        password = driver.find_element(By.ID, "login-password")
-        password.send_keys(password)
+        password_input = driver.find_element(By.ID, "login-password")
+        password_input.send_keys(spotify_password)
 
         login_button = driver.find_element(By.ID, "login-button")
         login_button.click()
 
     except Exception as e:
+        print("--- Error when logging in")
         print(e)
         driver.quit()
         return None
 
-    print("--- Logged in")
-    time.sleep(2)
-    print("--- Done sleeping")
+    time.sleep(1)
 
     try:
-        url = f"https://accounts.spotify.com/authorize?client_id={client_id}&response_type=code&redirect_uri=http://localhost:3000/callback&scope=playlist-modify-private%20playlist-modify-public"
+        url = f"https://accounts.spotify.com/authorize?client_id={client_id}&response_type=code&redirect_uri={callback_uri}&scope=playlist-modify-private%20playlist-modify-public"
         driver.get(url)
     except Exception as e:
         print("--- Error when redirecting to Spotify")
@@ -81,15 +83,14 @@ def get_code_with_auth():
 
     time.sleep(1)
 
-    print("--- Redirected to Spotify")
     code = driver.current_url.split("code=")[1].split("&")[0]
     driver.quit()
 
     return code
 
 
-@app.get("/")
-def handle_get():
+@app.get("/health")
+def handle_health():
     return "OK"
 
 
@@ -105,7 +106,8 @@ def handle_get_code():
         print("--- Error: No code")
         return {"code": ""}
 
-    print(code)
+    if DEV:
+        print(code)
     return {"code": code}
 
 

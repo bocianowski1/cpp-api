@@ -2,7 +2,7 @@ f = main
 
 run:
 	@echo "Running in Docker\n"
-	@cd app && docker build -t cpp . && docker run -it --rm cpp
+	@cd app && docker build -t cpp . && docker run -it --rm --env-file .env cpp
 
 local:
 	@echo "Compiling..."
@@ -15,4 +15,7 @@ amend:
 	@git add . && git commit --amend --no-edit && git push -f
 
 serve:
-	@cd server && docker build -t server . && docker run -it --rm -p 3000:3000 server
+	@cd server && docker build -t server . && docker run -it --rm -p 3000:3000 --env-file .env server
+
+local-server:
+	@cd server && python3 main.py
