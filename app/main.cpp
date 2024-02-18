@@ -18,7 +18,7 @@ int health_check(CURL *curl) {
     curl = curl_easy_init();
 
     if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:3000");
+        curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:3000/health");
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         
@@ -279,17 +279,13 @@ std::pair<json, int> add_to_playlist(CURL *curl, const char *token, std::string 
 int main() {
     CURL *curl;
 
-    // int health = 1;
-    // health = health_check(curl);
+    int health = 1;
+    health = health_check(curl);
 
-    // if (health != 0) {
-    //     std::cerr << "Health check failed" << std::endl;
-    //     return 1;
-    // }
-
-    // std::cout << "Health check passed\n" << std::endl;
-
-    // return 0;
+    if (health != 0) {
+        std::cerr << "Health check failed" << std::endl;
+        return 1;
+    }
 
     auto [code, cs] = authorize(curl);
     std::cout << "Code in main after authorize(): " << code << std::endl;
