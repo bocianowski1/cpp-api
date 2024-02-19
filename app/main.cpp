@@ -7,6 +7,7 @@
 #include <vector>
 
 using json = nlohmann::json;
+using track = std::pair<std::string, std::string>;
 
 size_t write_callback(void *contents, size_t size, size_t nmemb, std::string *userp) {
     userp->append((char*)contents, size * nmemb);
@@ -82,7 +83,7 @@ std::string get_spotify_token(CURL *curl, std::string code) {
 }
 
 std::string get_code(CURL *curl) {
-    std::cout << "Getting code" << std::endl;
+    std::cout << "Getting code. This will take a few seconds..." << std::endl;
 
     CURLcode res;
     std::string readBuffer;
@@ -153,18 +154,17 @@ std::string get_code_with_auth(CURL *curl) {
     return get_code(curl);
 }
 
-json get_on_repeat_tracks(CURL *curl, std::string *token) {
+std::vector<std::pair<std::string, std::string>> get_tracks(CURL *curl, std::string *token, char *playlistId) {
     CURLcode res;
     std::string readBuffer;
 
-    char *onRepeatId = getenv("ON_REPEAT_ID");
-    if (onRepeatId == nullptr) {
-        std::cerr << "ON_REPEAT_ID is null" << std::endl;
+    if (playlistId == nullptr) {
+        std::cerr << "playlistId is null" << std::endl;
         return json{};
     }
 
     char *url; 
-    asprintf(&url, "https://api.spotify.com/v1/playlists/%s", onRepeatId);
+    asprintf(&url, "https://api.spotify.com/v1/playlists/%s", playlistId);
 
     struct curl_slist *headers = NULL;
     std::string header = "Authorization: Bearer " + *token;
@@ -209,7 +209,24 @@ json get_on_repeat_tracks(CURL *curl, std::string *token) {
         return json{};
     }
 
-    return jsonResponse;
+    std::vector<track> tracks;
+    for (auto &item : jsonResponse["tracks"]["items"]) {
+        std::string id = item["track"]["id"];
+        std::string name = item["track"]["name"];
+        tracks.push_back({id, name});
+    }
+
+    return tracks;
+}
+
+bool track_in_playlist(std::vector<track> *tracks, std::string *trackId) {
+    for (auto &track : *tracks) {
+        if (track.first == *trackId) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void add_to_playlist(std::string *token, char *playlistId, std::string *trackIdToAdd) {
@@ -280,7 +297,6 @@ void add_to_playlist(std::string *token, char *playlistId, std::string *trackIdT
 int main() {
     std::vector<std::thread> threads;
     CURL *curl;
-    json res;
 
     std::string code = get_code_with_auth(curl);
     if (code == "") {
@@ -294,19 +310,32 @@ int main() {
         return 1;
     }
 
-    res = get_on_repeat_tracks(&curl, &token);
-    if (res.is_null()) {
-        std::cout << "Error in get_on_repeat_tracks()" << std::endl;
+    std::vector<track> onRepeatTracks;
+    char *onRepeatPlaylistId = getenv("ON_REPEAT_ID");
+    onRepeatTracks = get_tracks(&curl, &token, onRepeatPlaylistId);
+    if (onRepeatTracks.size() == 0) {
+        std::cerr << "No onRepeatTracks in get_tracks()" << std::endl;
+        return 1;
+    }
+
+    std::vector<track> wrappedTracks;
+    char *wrappedPlaylistId = getenv("ADD_PLAYLIST_ID");
+    wrappedTracks = get_tracks(&curl, &token, wrappedPlaylistId);
+    if (wrappedTracks.size() == 0) {
+        std::cerr << "No wrappedTracks in get_tracks()" << std::endl;
         return 1;
     }
 
     int i = 1;
-    std::vector<std::pair<std::string, std::string>> tracks;
-    for (auto &item : res["tracks"]["items"]) {
-        std::string id = item["track"]["id"];
-        std::string name = item["track"]["name"];
-        tracks.push_back({id, name});
-
+    std::vector<track> topTracks;
+    for (auto &track : onRepeatTracks) {
+        if (!track_in_playlist(&wrappedTracks, &track.first)) {
+            topTracks.push_back(track);
+        } else {
+            std::cout << "| track: " << track.second << " is already in playlist" << std::endl;
+            continue;
+        }
+        
         if (i == 3) {
             break;
         }
@@ -314,10 +343,14 @@ int main() {
         i++;
     }
 
-    char *playlistId = getenv("ADD_PLAYLIST_ID");
-    for (auto &track : tracks) {
+    if (topTracks.size() == 0) {
+        std::cout << "No tracks to add" << std::endl;
+        return 0;
+    }
+
+    for (auto &track : topTracks) {
         std::cout << "| id: " << track.first << " | name: " << track.second << std::endl;
-        threads.push_back(std::thread(&add_to_playlist, &token, playlistId, &track.first));
+        threads.push_back(std::thread(&add_to_playlist, &token, wrappedPlaylistId, &track.first));
     }
 
     for (auto &t : threads) {

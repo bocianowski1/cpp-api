@@ -21,7 +21,5 @@ Start C++ app: `make local`
 
 ## TODO:
 
-- Don't add duplicate songs
-- Remove duplicate code
 - Deploy Python server
 - Deploy C++ app
