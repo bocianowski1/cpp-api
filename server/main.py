@@ -4,6 +4,7 @@ from selenium.webdriver.common.by import By
 import time
 from dotenv import load_dotenv
 import os
+import subprocess
 
 from flask import Flask
 
@@ -86,10 +87,14 @@ def get_code_with_auth():
 
     time.sleep(1)
 
-    code = driver.current_url.split("code=")[1].split("&")[0]
-    driver.quit()
-
-    return code
+    try:
+        return driver.current_url.split("code=")[1].split("&")[0]
+    except Exception as e:
+        print("--- Error when getting code")
+        print(e)
+        return None
+    finally:
+        driver.quit()
 
 
 @app.get("/callback")
@@ -107,6 +112,16 @@ def handle_get_code():
     if DEV:
         print(code)
     return {"code": code}
+
+
+@app.get("/run")
+def handle_root():
+    if DEV:
+        subprocess.run(["../bin/main"])
+    else:
+        subprocess.run(["echo", "Hello"])
+
+    return {"message": "success"}
 
 
 if __name__ == "__main__":
