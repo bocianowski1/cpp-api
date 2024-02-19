@@ -4,12 +4,12 @@ This is a project for learning C++. It adds the top songs from my _On Repeat_ pl
 
 ## Run in Docker
 
-`make run` or simply `make` - a shortcut for building and running the Dockerfile. This currently does not start the Python server.<br/>This must be done separately: `make serve`.
+`make run` or simply `make` — a shortcut for building and running the Dockerfile. This currently does not start the Python server.<br/>This must be done separately: `make serve`.
 
 ## Run locally
 
 **Before running the code locally**
-Export the required environment variables. Copy the output from `env.sh`.
+Export the required environment variables. Copy the output from `env.sh app`.
 
 Install C++ Dependencies: `brew install libcurl`<br/>
 Install Python Dependencies: `pip3 install -r requirements.txt`
@@ -22,7 +22,6 @@ Start C++ app: `make local`
 ## TODO:
 
 - Don't add duplicate songs
-- Add concurrently using threads
 - Remove duplicate code
 - Deploy Python server
 - Deploy C++ app

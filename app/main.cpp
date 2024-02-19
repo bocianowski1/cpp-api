@@ -3,6 +3,8 @@
 #include <string>
 #include "json.hpp"
 #include <tuple>
+#include <thread>
+#include <vector>
 
 using json = nlohmann::json;
 
@@ -11,55 +13,29 @@ size_t write_callback(void *contents, size_t size, size_t nmemb, std::string *us
     return size * nmemb;
 }
 
-int health_check(CURL *curl) {
+std::string get_spotify_token(CURL *curl, std::string code) {
     CURLcode res;
     std::string readBuffer;
-
-    curl = curl_easy_init();
-
-    if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:3000/health");
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-        
-        res = curl_easy_perform(curl);
-        
-        if (res != CURLE_OK) {
-            std::cerr << "curl_easy_perform() failed in health_check(): " << curl_easy_strerror(res) << std::endl;
-            return 1;
-        }
-
-        curl_easy_cleanup(curl);
-
-        if (readBuffer == "OK") {
-            return 0;
-        }
-
-        return 1;
-    } else {
-        std::cerr << "curl_easy_init() failed" << std::endl;
-        return 1;
-    }
-    
-}
-
-std::pair<std::string, int> get_spotify_token(CURL *curl, char *code) {
-    CURLcode res;
-    std::string readBuffer;
-    int status;
 
     std::cout << "Getting token" << std::endl;
-    
+    if (getenv("ENCODED_SPOTIFY_CREDENTIALS") == nullptr) {
+        std::cerr << "ENCODED_SPOTIFY_CREDENTIALS is null" << std::endl;
+        return std::string{};
+    }
+
+    if (getenv("SERVER_URL") == nullptr) {
+        std::cerr << "SERVER_URL is null" << std::endl;
+        return std::string{};
+    }
+
     char *postFields;
-    asprintf(&postFields, "grant_type=authorization_code&code=%s&redirect_uri=http://localhost:3000/callback", code);
+    asprintf(&postFields, "grant_type=authorization_code&code=%s&redirect_uri=%s/callback", code.c_str(), getenv("SERVER_URL"));
 
     struct curl_slist *headers = NULL;
     std::string header = "Authorization: Basic " + std::string(getenv("ENCODED_SPOTIFY_CREDENTIALS"));
     std::string contentType = "content-type: application/x-www-form-urlencoded";
     headers = curl_slist_append(headers, header.c_str());
     headers = curl_slist_append(headers, contentType.c_str());
-
-    std::cout << std::string(getenv("ENCODED_SPOTIFY_CREDENTIALS")) << std::endl;
 
     curl = curl_easy_init();
     if (curl) {
@@ -72,9 +48,10 @@ std::pair<std::string, int> get_spotify_token(CURL *curl, char *code) {
         
         res = curl_easy_perform(curl);
 
+
         if (res != CURLE_OK) {
             std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
-            return {std::string{}, 500};
+            return std::string{};
         }
 
         curl_easy_cleanup(curl);
@@ -86,25 +63,36 @@ std::pair<std::string, int> get_spotify_token(CURL *curl, char *code) {
         jsonResponse = json::parse(readBuffer);
     } catch (json::parse_error& e) {
         std::cerr << "JSON parse error: " << e.what() << std::endl;
+        return std::string{};
     }
 
-    if (jsonResponse["error"].is_object()) {
-        std::cerr << "Spotify API error: " << jsonResponse["error"]["message"] << std::endl;
+    if (jsonResponse.find("error") != jsonResponse.end()) {
+        std::cerr << "Spotify API error!\n" << jsonResponse["error_description"] << std::endl;
+        return std::string{};
     }
 
-    return {jsonResponse["access_token"], 200};
+    if (jsonResponse["access_token"] == nullptr) {
+        std::cerr << "Access token is null" << std::endl;
+        return std::string{};
+    }
+
+    std::cout << "Received token\n" << std::endl;
+
+    return jsonResponse["access_token"];
 }
 
-std::pair<std::string, int> get_code(CURL *curl) {
+std::string get_code(CURL *curl) {
     std::cout << "Getting code" << std::endl;
 
     CURLcode res;
     std::string readBuffer;
-    int status;
+
+    char *url;
+    asprintf(&url, "%s/code", getenv("SERVER_URL"));
 
     curl = curl_easy_init();
     if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:3000/code");
+        curl_easy_setopt(curl, CURLOPT_URL, url);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         
@@ -118,7 +106,7 @@ std::pair<std::string, int> get_code(CURL *curl) {
     }
 
     if (readBuffer == "") {
-        return {std::string{}, 500};
+        return std::string{};
     }
 
     json jsonResponse;
@@ -126,29 +114,26 @@ std::pair<std::string, int> get_code(CURL *curl) {
         jsonResponse = json::parse(readBuffer);
     } catch (json::parse_error& e) {
         std::cerr << "JSON parse error: " << e.what() << std::endl;
-        return {std::string{}, 500};
+        return std::string{};
     }
 
-    if (jsonResponse["error"].is_object()) {
-        std::cerr << "Spotify API error: " << jsonResponse["error"]["message"] << std::endl;
-        return {std::string{}, 500};
+    if (jsonResponse.find("error") != jsonResponse.end()) {
+        std::cerr << "Spotify API error!\n" << jsonResponse["error_description"] << std::endl;
+        return std::string{};
     }
 
-    return {jsonResponse["code"], 200};
+    std::cout << "Received code\n" << std::endl;
+
+    return jsonResponse["code"];
 }
 
-std::pair<std::string, int> authorize(CURL *curl) {
+std::string get_code_with_auth(CURL *curl) {
     std::cout << "Authorizing" << std::endl;
 
     CURLcode res;
-    int status;
 
     char *url;
-    auto redirectUri = "http://localhost:3000/callback";
-
-    asprintf(&url, "https://accounts.spotify.com/authorize?client_id=%s&response_type=code&redirect_uri=%s&scope=playlist-modify-public%%20playlist-modify-private", getenv("SPOTIFY_CLIENT_ID"), redirectUri);
-
-    // "https://accounts.spotify.com/authorize?client_id=89b3a6ef9c30486e9ceb9a386aa57019&response_type=code&redirect_uri=http://localhost:3000/callback&scope=playlist-modify-private%20playlist-modify-public";
+    asprintf(&url, "https://accounts.spotify.com/authorize?client_id=%s&response_type=code&redirect_uri=%s/callback&scope=playlist-modify-public%%20playlist-modify-private", getenv("SPOTIFY_CLIENT_ID"), getenv("SERVER_URL"));
 
     curl = curl_easy_init();
     if (curl) {
@@ -168,13 +153,21 @@ std::pair<std::string, int> authorize(CURL *curl) {
     return get_code(curl);
 }
 
-std::pair<json, int> get_on_repeat_tracks(CURL *curl, const char *token) {
+json get_on_repeat_tracks(CURL *curl, std::string *token) {
     CURLcode res;
     std::string readBuffer;
-    const auto *url = "https://api.spotify.com/v1/playlists/37i9dQZF1Epn47BfY5AfsA";
+
+    char *onRepeatId = getenv("ON_REPEAT_ID");
+    if (onRepeatId == nullptr) {
+        std::cerr << "ON_REPEAT_ID is null" << std::endl;
+        return json{};
+    }
+
+    char *url; 
+    asprintf(&url, "https://api.spotify.com/v1/playlists/%s", onRepeatId);
 
     struct curl_slist *headers = NULL;
-    std::string header = "Authorization: Bearer " + std::string(token);
+    std::string header = "Authorization: Bearer " + *token;
     headers = curl_slist_append(headers, header.c_str());
 
     curl = curl_easy_init();
@@ -191,16 +184,16 @@ std::pair<json, int> get_on_repeat_tracks(CURL *curl, const char *token) {
 
         if (res != CURLE_OK) {
             std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
-            return { json{}, res };
+            return json{};
         }
     } else {
         std::cerr << "curl_easy_init() failed" << std::endl;
-        return { json{}, 500 };
+        return json{};
     }
 
     if (readBuffer == "Not Found") {
         std::cout << "Playlist not Found" << std::endl;
-        return { json{}, 404 };
+        return json{};
     }
 
     json jsonResponse;
@@ -208,29 +201,36 @@ std::pair<json, int> get_on_repeat_tracks(CURL *curl, const char *token) {
         jsonResponse = json::parse(readBuffer);
     } catch (json::parse_error& e) {
         std::cerr << "JSON parse error: " << e.what() << std::endl;
-        return { json{}, 500 };
+        return json{};
     }
 
-    if (jsonResponse["error"].is_object()) {
-        std::cerr << "Spotify API error: " << jsonResponse["error"]["message"] << std::endl;
-        std::cerr << "Response: " << jsonResponse << std::endl;
-        return { jsonResponse, 500 };
+    if (jsonResponse.find("error") != jsonResponse.end()) {
+        std::cerr << "Spotify API error!\n" << jsonResponse["error_description"] << std::endl;
+        return json{};
     }
 
-    return { jsonResponse, 200 };
+    return jsonResponse;
 }
 
-std::pair<json, int> add_to_playlist(CURL *curl, const char *token, std::string *id) {
+void add_to_playlist(std::string *token, char *playlistId, std::string *trackIdToAdd) {
+    CURL *curl = curl_easy_init();
     CURLcode res;
     std::string readBuffer;
-    const auto *url = "https://api.spotify.com/v1/playlists/28Mb7LZeS6AVlgMUPMUO66/tracks";
+
+    if (playlistId == nullptr || trackIdToAdd == nullptr) {
+        std::cerr << "playlistId or trackIdToAdd is null" << std::endl;
+        return;
+    }
+
+    char *url;
+    asprintf(&url, "https://api.spotify.com/v1/playlists/%s/tracks", playlistId);
 
     struct curl_slist *headers = NULL;
-    std::string header = "Authorization: Bearer " + std::string(token);
+    std::string header = "Authorization: Bearer " + *token;
     headers = curl_slist_append(headers, header.c_str());
     headers = curl_slist_append(headers, "Content-Type: application/json");
 
-    std::string body = "{\"uris\": [\"spotify:track:" + *id + "\"], \"position\": 0}";
+    std::string body = "{\"uris\": [\"spotify:track:" + *trackIdToAdd + "\"], \"position\": 0}";
 
     curl = curl_easy_init();
     if (curl) {
@@ -248,16 +248,16 @@ std::pair<json, int> add_to_playlist(CURL *curl, const char *token, std::string 
 
         if (res != CURLE_OK) {
             std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
-            return { json{}, res };
+            return;
         }
     } else {
         std::cerr << "curl_easy_init() failed" << std::endl;
-        return { json{}, 500 };
+        return;
     }
 
     if (readBuffer == "Not Found") {
         std::cout << "Not Found" << std::endl;
-        return { json{}, 404 };
+        return;
     }
 
     json jsonResponse;
@@ -265,102 +265,67 @@ std::pair<json, int> add_to_playlist(CURL *curl, const char *token, std::string 
         jsonResponse = json::parse(readBuffer);
     } catch (json::parse_error& e) {
         std::cerr << "JSON parse error: " << e.what() << std::endl;
-        return { json{}, 500 };
+        return;
     }
 
-    if (jsonResponse["error"].is_object()) {
-        std::cerr << "Spotify API error: " << jsonResponse["error"]["message"] << std::endl;
-        return { jsonResponse, 500 };
+    if (jsonResponse.find("error") != jsonResponse.end()) {
+        std::cerr << "Spotify API error!\n" << jsonResponse["error_description"] << std::endl;
+        return;
     }
 
-    return { jsonResponse, 200 };
+    std::cout << "Added " << trackIdToAdd << " to playlist" << std::endl;
+    return;
 }
 
 int main() {
+    std::vector<std::thread> threads;
     CURL *curl;
+    json res;
 
-    int health = 1;
-    health = health_check(curl);
-
-    if (health != 0) {
-        std::cerr << "Health check failed" << std::endl;
-        return 1;
-    }
-
-    auto [code, cs] = authorize(curl);
-    std::cout << "Code in main after authorize(): " << code << std::endl;
-
+    std::string code = get_code_with_auth(curl);
     if (code == "") {
-        std::cerr << "Error in authorize: " << cs << " code: " << code << std::endl;
+        std::cerr << "Error in get_code_with_auth()" << std::endl;
         return 1;
     }
 
-    auto [tokenStr, ts] = get_spotify_token(&curl, (char *)code.c_str());
-    const char *token = tokenStr.c_str();
-
-
-    auto [response, status] = get_on_repeat_tracks(&curl, token);
-
-    if (response.is_null() || response == NULL) {
-        std::cerr << "Error in get_on_repeat_tracks(): " << status << std::endl;
+    std::string token = get_spotify_token(&curl, code);
+    if (token == "") {
+        std::cerr << "Error in get_spotify_token(): " << token << std::endl;
         return 1;
     }
 
-    switch (status) {
-        case 200:
-            std::cout << "Success" << std::endl;
-            break;
-        case 404:
-            std::cout << "Not Found" << std::endl;
-            break;
-        default:
-            std::cerr << "Error: " << status << std::endl;
-            return 1;
+    res = get_on_repeat_tracks(&curl, &token);
+    if (res.is_null()) {
+        std::cout << "Error in get_on_repeat_tracks()" << std::endl;
+        return 1;
     }
 
-    int i = 0;
+    int i = 1;
     std::vector<std::pair<std::string, std::string>> tracks;
-    for (auto &item : response["tracks"]["items"]) {
-        i++;
-
+    for (auto &item : res["tracks"]["items"]) {
         std::string id = item["track"]["id"];
         std::string name = item["track"]["name"];
         tracks.push_back({id, name});
 
-        if (i == 5) {
+        if (i == 3) {
             break;
         }
+
+        i++;
     }
 
+    char *playlistId = getenv("ADD_PLAYLIST_ID");
     for (auto &track : tracks) {
         std::cout << "| id: " << track.first << " | name: " << track.second << std::endl;
+        threads.push_back(std::thread(&add_to_playlist, &token, playlistId, &track.first));
     }
 
-    for (int i = 0; i < 5; i++) {
-        if (tracks[i].second == "leve") {
-            continue;
-        }
-        auto [addResponse, addStatus] = add_to_playlist(&curl, token, &tracks[i].first);
-
-        if (addResponse.is_null() || addResponse == NULL) {
-            std::cerr << addResponse << std::endl;
-            std::cerr << "Error in add: " << addStatus << std::endl;
-            return 1;
-        }
-
-        switch (addStatus) {
-            case 200:
-                std::cout << "Success" << std::endl;
-                break;
-            case 404:
-                std::cout << "Not Found" << std::endl;
-                break;
-            default:
-                std::cerr << "Error 500 in add: " << addStatus << std::endl;
-                return 1;
+    for (auto &t : threads) {
+        if (t.joinable()) {
+            t.join();
         }
     }
 
-    curl_easy_cleanup(curl);
+    std::cout << "Success" << std::endl;
     return 0;
 }
