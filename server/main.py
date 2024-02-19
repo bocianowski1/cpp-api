@@ -1,5 +1,4 @@
 from selenium import webdriver
-from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.common.by import By
 
 import time
@@ -10,7 +9,7 @@ from flask import Flask
 
 load_dotenv()
 
-DEV = os.environ.get("ENV") == "development"
+DEV = os.environ.get("ENV") == "dev"
 app = Flask(__name__)
 
 if DEV:
@@ -19,26 +18,30 @@ else:
     from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.chrome.options import Options as ChromeOptions
 
-options = FirefoxOptions() if DEV else ChromeOptions()
-driver = None
 
-if not DEV:
-    options.binary_location = "/usr/bin/chromium-browser"
-options.add_argument("--headless")
-options.add_argument("--no-sandbox")
-options.add_argument("--disable-dev-shm-usage")
+def init_driver():
+    options = FirefoxOptions() if DEV else ChromeOptions()
+    driver = None
 
-if DEV:
-    print("--- Using Firefox (DEV)\n")
-    driver = webdriver.Firefox(options=options)
-else:
-    print("--- Using Chrome (PROD)\n")
-    chrome_driver_path = "/usr/bin/chromedriver"
-    service = Service(executable_path=chrome_driver_path)
-    driver = webdriver.Chrome(service=service, options=options)
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+
+    if DEV:
+        print("--- Using Firefox (DEV)\n")
+        driver = webdriver.Firefox(options=options)
+    else:
+        print("--- Using Chrome (PROD)\n")
+        chrome_driver_path = "/usr/bin/chromedriver"
+        options.binary_location = "/usr/bin/chromium-browser"
+        service = Service(executable_path=chrome_driver_path)
+        driver = webdriver.Chrome(service=service, options=options)
+
+    return driver
 
 
 def get_code_with_auth():
+    driver = init_driver()
     client_id = os.environ.get("SPOTIFY_CLIENT_ID")
     callback_uri = os.environ.get("SPOTIFY_CALLBACK_URI")
     if client_id is None or callback_uri is None:
@@ -87,11 +90,6 @@ def get_code_with_auth():
     driver.quit()
 
     return code
-
-
-@app.get("/health")
-def handle_health():
-    return "OK"
 
 
 @app.get("/callback")
