@@ -11,11 +11,11 @@ local:
 	@echo "Running code\n"
 	@./bin/$(f)
 
-amend:
-	@git add . && git commit --amend --no-edit && git push -f
-
 serve:
 	@cd server && docker build -t server . && docker run -it --rm -p 3000:3000 --env-file .env server
 
 local-server:
 	@cd server && python3 main.py
+
+amend:
+	@git add . && git commit --amend --no-edit && git push -f
